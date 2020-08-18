@@ -1,0 +1,142 @@
+---
+title: "Dimensional Reduction of TIV 2011 microarray data"
+author: "GW McElfresh"
+date: "August 17, 2020"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+    keep_md: yes
+---
+# 1 Read in data from ImmuneSpace via ImmuneSpaceR
+First, we will import the necessary libraries using pacman, read in the data from SDY1119 from ImmuneSpace (accession GSE74816) concerning the TIV 2011 vaccination, and extract the gene expression information into a list of matrices. 
+
+```{r initialization}
+#check for pacman, then use it to load/install the rest of the packages
+if(!require(pacman)){
+    install.packages("pacman")
+    library(pacman)
+}
+pacman::p_load(ImmuneSpaceR, umap, ggplot2, gridExtra, cowplot)
+
+sdy1119 <- CreateConnection("SDY1119")
+sdy1119GEMatrices <- sdy1119$getGEMatrix(c("SDY1119_PBMC_oldHealthy_Geo", "SDY1119_PBMC_oldT2D_Geo",  "SDY1119_PBMC_youngT2D_Geo", "SDY1119_PBMC_youngHealthy_Geo"), 
+                              outputType = "summary", 
+                              annotation = "latest")
+```
+# 2 Extract Essential Data & UMAP
+
+The samples in this study vary on:
+
+* age 
+  + young (<65) or old (>65)
+* days since vaccination
+  + 0 days, 3 days, or 7 days
+* diabetic status
+  + Type-2 diabetes (T2D) or non-diabetic (healthy)
+  
+In order to account for these groups properly when we examine the UMAP projection later, we need to extract the relevant data. This data was preprocessed via RMA.  
+
+```{r dataExtraction}
+geneExpressionData <- t(sdy1119GEMatrices@assayData$exprs)
+cohortType <- sdy1119GEMatrices@phenoData@data$cohort
+studyTimes <- sdy1119GEMatrices@phenoData@data$study_time_collected
+```
+
+We will use UMAP to reduce the dimensionality of the data and extract just the points for plotting. UMAP is performed under default settings, but the seed is fixed for reproducibility.
+
+```{r umapTransform}
+data.umap <- umap(geneExpressionData, random_state = 2011, transform_seed = 2011)
+transformed_data <- data.umap$layout
+```
+
+# 3 Plotting
+
+In order to visually analyze the intrinsic variability in the data, we will set a custom color palette to more easily group similar data. The cohort types present in the data are: 
+
+* old_healthy (red) 
+* old_T2D (yellow)
+* young_healthy (green)
+* young_T2D (blue) 
+
+Additionally, we'll add the cohort data and when the samples were collected to the reduced gene expression data for plotting.
+
+```{r colormapping}
+colormap <- c("#ff0400", "#b50502", "#750301",
+              "#f5d402", "#a18b00", 
+              "#08fc00", "#05a600", "#057801", 
+              "#00FFFF", "#0088ff", "#0011ff")
+
+transformed_data <- as.data.frame(transformed_data)
+names(transformed_data) <- c("x", "y")
+transformed_data$cohort = paste(cohortType, studyTimes)
+```
+
+```{r plots, eval=TRUE, echo=FALSE}
+umapPlotLegend <- ggplot(data = transformed_data, 
+       mapping =  aes(x=x, y=y, color=cohort)) +
+       theme(legend.position = "bottom") +
+       scale_color_manual(values=colormap) +
+  geom_point()
+umapOnlyPlot <- ggplot(data = transformed_data, 
+       mapping =  aes(x=x, y=y, color=cohort)) +
+       scale_color_manual(values=colormap) +
+       theme(legend.position="none",
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) +
+  geom_point()
+umapLegend <- cowplot::get_legend(umapPlotLegend)
+xDensity <- ggplot(data = transformed_data,
+       mapping = aes(x, fill=cohort)) +
+       scale_fill_manual(values=colormap) +
+       theme(legend.position="none",
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) +
+  geom_density(alpha=.3)
+yDensity <- ggplot(data = transformed_data,
+       mapping = aes(y, fill=cohort)) +
+       coord_flip() +
+       scale_fill_manual(values=colormap) +
+       theme(legend.position="none",
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),
+        axis.text.y=element_blank(),
+        axis.ticks.y=element_blank()) +
+  geom_density(alpha=.3)
+blank <- ggplot()+geom_blank(aes(1,1))+
+  theme(plot.background = element_blank(), 
+   panel.grid.major = element_blank(),
+   panel.grid.minor = element_blank(), 
+   panel.border = element_blank(),
+   panel.background = element_blank(),
+   axis.title.x = element_blank(),
+   axis.title.y = element_blank(),
+   axis.text.x = element_blank(), 
+   axis.text.y = element_blank(),
+   axis.ticks = element_blank()
+   )
+grid.arrange(xDensity, umapOnlyPlot, yDensity,umapLegend,
+             ncol=2, 
+             nrow=3, 
+             widths= c(6,1), 
+             heights=c(1,4,1), 
+             layout_matrix= rbind(c(1, NA), c(2,3), c(4))
+             )
+```
+
+From this reduction, we can suspect that the gene expression from the patients with Type 2 diabetes is significantly different than those of non-diabetic patients. Future analysis on this data should take into account that the data segregates more strongly on being diabetic versus non-diabetic rather than age or days since vaccination. 
+
+# 4 Session Info
+```{r sessionInfo}
+sessionInfo()
+```
