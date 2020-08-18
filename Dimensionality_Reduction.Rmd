@@ -3,10 +3,15 @@ title: "Dimensional Reduction of TIV 2011 microarray data"
 author: "GW McElfresh"
 date: "August 17, 2020"
 output:
-  html_document:
+# md options for github viewability
+  md_document:
     toc: true
-    df_print: paged
-    keep_md: yes
+    variant: markdown_github
+# html settings for local use  
+#  html_document:
+#    toc: true
+#    df_print: paged
+#
 ---
 # 1 Read in data from ImmuneSpace via ImmuneSpaceR
 First, we will import the necessary libraries using pacman, read in the data from SDY1119 from ImmuneSpace (accession GSE74816) concerning the TIV 2011 vaccination, and extract the gene expression information into a list of matrices. 
